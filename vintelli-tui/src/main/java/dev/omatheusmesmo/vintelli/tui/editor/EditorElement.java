@@ -45,6 +45,8 @@ final class EditorElement implements Element {
     private static final String UNDERLINE_ASCII = "-";
     private static final String OVERFLOW = "»";
     private static final String OVERFLOW_ASCII = ">";
+    private static final String CLOSE = "×";
+    private static final String CLOSE_ASCII = "x";
     private static final String DIRTY_MARK = "●";
     private static final String DIRTY_MARK_ASCII = "*";
     private static final String LINE_NUMBER_ROLE = "editor-line-number";
@@ -94,13 +96,27 @@ final class EditorElement implements Element {
                 selected = index;
             }
         }
+        String prompt = editor.closeConfirmationPending() ? editor.status() : null;
         tabBar.update(labels, selected, focused, new EditorTabBarElement.Glyphs(focusMark,
-                ascii ? UNDERLINE_ASCII : UNDERLINE, ascii ? OVERFLOW_ASCII : OVERFLOW));
+                ascii ? UNDERLINE_ASCII : UNDERLINE, ascii ? OVERFLOW_ASCII : OVERFLOW, ascii ? CLOSE_ASCII : CLOSE),
+                prompt);
         tabBar.render(frame, area, context);
     }
 
     int tabAt(int x, int y) {
         return tabBar.tabAt(x, y);
+    }
+
+    int closeAt(int x, int y) {
+        return tabBar.closeAt(x, y);
+    }
+
+    int tabUnder(int x, int y) {
+        return tabBar.tabUnder(x, y);
+    }
+
+    boolean hoverTab(int x, int y) {
+        return tabBar.hover(x, y);
     }
 
     private final class MenuAwareTextArea extends StyledElement<MenuAwareTextArea> {

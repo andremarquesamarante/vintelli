@@ -2784,6 +2784,160 @@ class VintelliShellTest {
     }
 
     @Test
+    void pilotClickOnTheCloseIconOfTheSelectedTabClosesIt() throws Exception {
+        Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
+        Path notes = projectFile("vintelli/notes.txt", "notes\n");
+        ShellThemes themes = defaultThemes();
+        BuiltinEditor editor = new BuiltinEditor(project, null, themes::editorPalette);
+        editor.open(new OpenRequest(pom, 0));
+        editor.open(new OpenRequest(notes, 0));
+        VintelliShell shell = editorShell(themes, editor);
+        try (MouseShellRunner test = runMouseShell(shell, SIZE)) {
+            Pilot pilot = test.pilot();
+            String labels = awaitRenderedFrame(pilot, test, "notes.txt").split("\n", -1)[HEADER_ROW];
+            int icon = labels.indexOf("notes.txt") + "notes.txt".length() + 1;
+            assertEquals(closeGlyph(), String.valueOf(labels.charAt(icon)), "the selected tab ends with its icon: " + labels);
+
+            pilot.click(icon, HEADER_ROW);
+            settle(pilot);
+
+            assertEquals(List.of("vintelli/pom.xml"), openTabs(editor), "the clicked icon closes its tab");
+            assertEquals(pom.toRealPath().toString(), editor.activeDocument().orElseThrow().file());
+        }
+    }
+
+    @Test
+    void pilotClickOnTheCloseIconOfAHoveredTabClosesItWithoutSelectingItOrMovingTheSelection() throws Exception {
+        Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
+        Path notes = projectFile("vintelli/notes.txt", "notes\n");
+        Path todo = projectFile("vintelli/todo.txt", "todo\n");
+        ShellThemes themes = defaultThemes();
+        BuiltinEditor editor = new BuiltinEditor(project, null, themes::editorPalette);
+        editor.open(new OpenRequest(pom, 0));
+        editor.open(new OpenRequest(notes, 0));
+        editor.open(new OpenRequest(todo, 0));
+        editor.selectTab(1);
+        VintelliShell shell = editorShell(themes, editor);
+        try (MouseShellRunner test = runMouseShell(shell, SIZE)) {
+            Pilot pilot = test.pilot();
+            String before = awaitRenderedFrame(pilot, test, "todo.txt").split("\n", -1)[HEADER_ROW];
+            int todoTitle = before.indexOf("todo.txt");
+            int todoIcon = todoTitle + "todo.txt".length() + 1;
+            assertEquals(" ", String.valueOf(before.charAt(todoIcon)), "an unhovered tab hides its icon: " + before);
+
+            pilot.mouseMove(todoTitle + 1, HEADER_ROW);
+            settle(pilot);
+            String hovered = test.renderedFrame().split("\n", -1)[HEADER_ROW];
+            assertEquals(closeGlyph(), String.valueOf(hovered.charAt(todoIcon)), "hovering shows the icon: " + hovered);
+            assertEquals(before.indexOf("todo.txt"), hovered.indexOf("todo.txt"), "the row does not move");
+
+            pilot.click(todoIcon, HEADER_ROW);
+            settle(pilot);
+
+            assertEquals(List.of("vintelli/pom.xml", "vintelli/notes.txt"), openTabs(editor));
+            assertEquals(notes.toRealPath().toString(), editor.activeDocument().orElseThrow().file(),
+                    "the selection stays on the tab that was selected");
+        }
+    }
+
+    @Test
+    void pilotMiddleClickOnATabClosesThatTabAndKeepsTheSelection() throws Exception {
+        Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
+        Path notes = projectFile("vintelli/notes.txt", "notes\n");
+        ShellThemes themes = defaultThemes();
+        BuiltinEditor editor = new BuiltinEditor(project, null, themes::editorPalette);
+        editor.open(new OpenRequest(pom, 0));
+        editor.open(new OpenRequest(notes, 0));
+        VintelliShell shell = editorShell(themes, editor);
+        try (MouseShellRunner test = runMouseShell(shell, SIZE)) {
+            Pilot pilot = test.pilot();
+            String labels = awaitRenderedFrame(pilot, test, "notes.txt").split("\n", -1)[HEADER_ROW];
+            int pomTitle = labels.indexOf("pom.xml") + 1;
+
+            pilot.mousePress(MouseButton.MIDDLE, pomTitle, HEADER_ROW);
+            pilot.mouseRelease(MouseButton.MIDDLE, pomTitle, HEADER_ROW);
+            settle(pilot);
+
+            assertEquals(List.of("vintelli/notes.txt"), openTabs(editor), "the middle click closes the tab under it");
+            assertEquals(notes.toRealPath().toString(), editor.activeDocument().orElseThrow().file());
+        }
+    }
+
+    @Test
+    void pilotCloseIconOfADirtyTabAsksInTheTabRowAndKeepsTheOtherTabsUntilAnswered() throws Exception {
+        Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
+        Path notes = projectFile("vintelli/notes.txt", "notes\n");
+        ShellThemes themes = defaultThemes();
+        BuiltinEditor editor = new BuiltinEditor(project, null, themes::editorPalette);
+        editor.open(new OpenRequest(pom, 0));
+        editor.open(new OpenRequest(notes, 0));
+        editor.selectTab(0);
+        editor.insert("x");
+        editor.selectTab(1);
+        VintelliShell shell = editorShell(themes, editor);
+        try (MouseShellRunner test = runMouseShell(shell, WIDE)) {
+            Pilot pilot = test.pilot();
+            String labels = awaitRenderedFrame(pilot, test, "notes.txt").split("\n", -1)[HEADER_ROW];
+            int pomTitle = labels.indexOf("pom.xml");
+            int pomIcon = pomTitle + ("pom.xml " + dirtyMark()).length() + 1;
+            pilot.mouseMove(pomTitle + 1, HEADER_ROW);
+            settle(pilot);
+
+            pilot.click(pomIcon, HEADER_ROW);
+            settle(pilot);
+
+            assertTrue(editor.closeConfirmationPending(), "a dirty tab asks first");
+            assertEquals(List.of("vintelli/pom.xml", "vintelli/notes.txt"), openTabs(editor));
+            assertEquals(notes.toRealPath().toString(), editor.activeDocument().orElseThrow().file());
+            String prompt = "Discard unsaved changes to vintelli/pom.xml? [y/N]";
+            assertTrue(editor.status().contains("Discard unsaved changes to"), "the status line keeps the question");
+            assertTrue(test.renderedFrame().split("\n", -1)[HEADER_ROW].replace('\\', '/').contains(prompt),
+                    "the tab row shows the question:\n" + test.renderedFrame());
+
+            press(pilot, 'y');
+            settle(pilot);
+
+            assertFalse(editor.closeConfirmationPending());
+            assertEquals(List.of("vintelli/notes.txt"), openTabs(editor), "only the confirmed tab closes");
+            assertEquals(notes.toRealPath().toString(), editor.activeDocument().orElseThrow().file());
+        }
+    }
+
+    @Test
+    void pilotResizeKeepsTheCloseIconOfTheDrawnTabsHittable() throws Exception {
+        Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
+        Path notes = projectFile("vintelli/notes.txt", "notes\n");
+        ShellThemes themes = defaultThemes();
+        BuiltinEditor editor = new BuiltinEditor(project, null, themes::editorPalette);
+        editor.open(new OpenRequest(pom, 0));
+        editor.open(new OpenRequest(notes, 0));
+        VintelliShell shell = editorShell(themes, editor);
+        try (MouseShellRunner test = runMouseShell(shell, SIZE)) {
+            Pilot pilot = test.pilot();
+            awaitRenderedFrame(pilot, test, "notes.txt");
+
+            test.resize(WIDE.width(), WIDE.height());
+            settle(pilot);
+            String labels = awaitRenderedFrame(pilot, test, "notes.txt").split("\n", -1)[HEADER_ROW];
+            int icon = labels.indexOf("notes.txt") + "notes.txt".length() + 1;
+            assertEquals(closeGlyph(), String.valueOf(labels.charAt(icon)), "the icon is drawn after the resize: " + labels);
+
+            pilot.click(icon, HEADER_ROW);
+            settle(pilot);
+
+            assertEquals(List.of("vintelli/pom.xml"), openTabs(editor), "the click uses the resized geometry");
+        }
+    }
+
+    private static List<String> openTabs(BuiltinEditor editor) {
+        return editor.tabs().stream().map(tab -> tab.file().replace('\\', '/')).toList();
+    }
+
+    private static String closeGlyph() {
+        return FileIcons.resolve().mode() == IconMode.ASCII ? "x" : "×";
+    }
+
+    @Test
     void theFocusMarkSitsInTheLabelRowOfTheTabBarAndTheLabelsStartAfterIt() throws IOException {
         Path pom = projectFile("vintelli/pom.xml", "<project/>\n");
         ShellThemes themes = defaultThemes();

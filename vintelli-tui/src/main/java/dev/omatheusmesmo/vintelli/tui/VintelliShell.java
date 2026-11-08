@@ -57,6 +57,7 @@ import dev.tamboui.toolkit.focus.FocusManager;
 import dev.tamboui.tui.event.Event;
 import dev.tamboui.tui.event.KeyCode;
 import dev.tamboui.tui.event.KeyEvent;
+import dev.tamboui.tui.event.MouseButton;
 import dev.tamboui.tui.event.MouseEvent;
 import dev.tamboui.tui.event.MouseEventKind;
 import dev.tamboui.style.Style;
@@ -1144,7 +1145,15 @@ public final class VintelliShell implements GlobalEventHandler, ShellHighlightPo
         if (mouse.isClick() && projectPanel.clicked(mouse)) {
             return EventResult.HANDLED;
         }
+        if (mouse.kind() == MouseEventKind.MOVE && editor != null && editor.hoverTab(mouse.x(), mouse.y())) {
+            return EventResult.HANDLED;
+        }
         if (mouse.isClick() && editor != null) {
+            int closing = editor.closeAt(mouse.x(), mouse.y());
+            if (closing >= 0) {
+                closeEditorTab(closing);
+                return EventResult.HANDLED;
+            }
             int tab = editor.tabAt(mouse.x(), mouse.y());
             if (tab >= 0) {
                 editor.selectTab(tab);
@@ -1155,6 +1164,13 @@ public final class VintelliShell implements GlobalEventHandler, ShellHighlightPo
             int segment = editor.navigationSegmentAt(mouse.x(), mouse.y());
             if (segment >= 0) {
                 navigateToBreadcrumb(segment);
+                return EventResult.HANDLED;
+            }
+        }
+        if (mouse.isPress() && mouse.button() == MouseButton.MIDDLE && editor != null) {
+            int middle = editor.tabUnder(mouse.x(), mouse.y());
+            if (middle >= 0) {
+                closeEditorTab(middle);
                 return EventResult.HANDLED;
             }
         }
@@ -1799,7 +1815,14 @@ public final class VintelliShell implements GlobalEventHandler, ShellHighlightPo
             status = "Built-in editor unavailable";
             return;
         }
-        BuiltinEditor.CloseResult result = editor.closeActive();
+        applyCloseResult(editor.closeActive());
+    }
+
+    private void closeEditorTab(int index) {
+        applyCloseResult(editor.closeTab(index));
+    }
+
+    private void applyCloseResult(BuiltinEditor.CloseResult result) {
         status = result == BuiltinEditor.CloseResult.CONFIRM_REQUIRED ? editor.status()
                 : result == BuiltinEditor.CloseResult.EMPTY ? "No editor tab is open" : "Tab closed";
     }

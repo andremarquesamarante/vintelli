@@ -134,6 +134,15 @@ public final class BuiltinEditor implements EditorBridge, ToolWindow {
     public synchronized int tabAt(int x, int y) {
         return element.tabAt(x, y);
     }
+    public synchronized int closeAt(int x, int y) {
+        return element.closeAt(x, y);
+    }
+    public synchronized int tabUnder(int x, int y) {
+        return element.tabUnder(x, y);
+    }
+    public synchronized boolean hoverTab(int x, int y) {
+        return element.hoverTab(x, y);
+    }
     public synchronized boolean handlePointer(MouseEvent event) {
         return element.handleMouse(event);
     }
@@ -316,15 +325,24 @@ public final class BuiltinEditor implements EditorBridge, ToolWindow {
         persist();
     }
 
-    public synchronized CloseResult closeActive() {
-        if (document() == null) { return CloseResult.EMPTY; }
-        if (document().dirty()) {
-            pendingClose = document().file();
+    public synchronized CloseResult closeActive() { return closeTab(active); }
+
+    /**
+     * Closes the tab at the index through the same path as the active-tab shortcut. A dirty tab asks
+     * first and leaves every tab and the selection untouched until the answer arrives; a second
+     * request while one is pending, or an index outside the open tabs, closes nothing.
+     */
+    public synchronized CloseResult closeTab(int index) {
+        if (index < 0 || index >= documents.size()) { return CloseResult.EMPTY; }
+        if (pendingClose != null) { return CloseResult.CONFIRM_REQUIRED; }
+        EditorDocument target = documents.get(index);
+        if (target.dirty()) {
+            pendingClose = target.file();
             focusRequest = "editor-close-confirmation";
             status = "Discard unsaved changes to " + project.relativize(pendingClose) + "? [y/N]";
             return CloseResult.CONFIRM_REQUIRED;
         }
-        removeActive();
+        removeAt(index);
         return CloseResult.CLOSED;
     }
 
@@ -339,7 +357,7 @@ public final class BuiltinEditor implements EditorBridge, ToolWindow {
         }
         boolean found = false;
         for (int i = 0; i < documents.size(); i++) {
-            if (documents.get(i).file().equals(closing)) { active = i; removeActive(); found = true; break; }
+            if (documents.get(i).file().equals(closing)) { removeAt(i); found = true; break; }
         }
         if (!found) {
             status = "Tab already closed";
@@ -347,9 +365,9 @@ public final class BuiltinEditor implements EditorBridge, ToolWindow {
         }
     }
 
-    private void removeActive() {
-        documents.remove(active);
-        active = Math.min(active, documents.size() - 1);
+    private void removeAt(int index) {
+        documents.remove(index);
+        active = index < active ? active - 1 : Math.min(active, documents.size() - 1);
         cancelPointer();
         focusRequest = document() == null ? null : TEXT_AREA_ID;
         status = "Tab closed";

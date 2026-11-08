@@ -211,7 +211,12 @@ for confirmation before removal. Project mutations use the configured local
 file provider; names must stay within the project and rename never replaces an
 existing entry. In the editor, `Ctrl+S` saves, `Ctrl+Z`/`Ctrl+Y` undo and redo,
 `Alt+]`/`Alt+[` switch editor tabs, and `Ctrl+W` closes a tab (dirty tabs ask
-for confirmation). `F10` opens the menus, the menu icon at the left of the
+for confirmation). Every tab ends with a close icon (`×`, or `x` on the ASCII
+face) that does the same as `Ctrl+W` for that tab: it shows on the selected tab
+and on the tab under the pointer, a middle click on a tab closes it too, and
+the question for a dirty tab appears in the tab row as well as in the status
+line. Closing a tab that is not selected keeps the selection where it was.
+`F10` opens the menus, the menu icon at the left of the
 toolbar does the same with the mouse, and long unavailable reasons can be
 scrolled with Page Up/Down.
 The editor shows clickable project path breadcrumbs and, when an LSP provider

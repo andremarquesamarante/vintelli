@@ -316,6 +316,98 @@ class BuiltinEditorTest {
     }
 
     @Test
+    void closingATabByIndexKeepsTheSelectionUnlessTheSelectedTabIsClosed() throws IOException {
+        BuiltinEditor editor = threeTabs();
+
+        assertEquals(BuiltinEditor.CloseResult.CLOSED, editor.closeTab(0));
+        assertEquals(List.of("B.java", "C.java"), tabNames(editor));
+        assertEquals("C.java", activeName(editor), "closing a tab before the selected one keeps the selection");
+
+        editor.selectTab(0);
+        assertEquals(BuiltinEditor.CloseResult.CLOSED, editor.closeTab(1));
+        assertEquals(List.of("B.java"), tabNames(editor));
+        assertEquals("B.java", activeName(editor), "closing a tab after the selected one keeps the selection");
+
+        assertEquals(BuiltinEditor.CloseResult.CLOSED, editor.closeTab(0));
+        assertTrue(editor.tabs().isEmpty());
+        assertEquals(BuiltinEditor.CloseResult.EMPTY, editor.closeTab(0));
+    }
+
+    @Test
+    void closingTheSelectedTabByIndexSelectsTheTabThatTakesItsPlace() throws IOException {
+        BuiltinEditor editor = threeTabs();
+        editor.selectTab(1);
+
+        assertEquals(BuiltinEditor.CloseResult.CLOSED, editor.closeTab(1));
+
+        assertEquals(List.of("A.java", "C.java"), tabNames(editor));
+        assertEquals("C.java", activeName(editor));
+    }
+
+    @Test
+    void closingADirtyTabThatIsNotSelectedAsksFirstAndKeepsEveryTabAndTheSelection() throws IOException {
+        BuiltinEditor editor = threeTabs();
+        editor.selectTab(0);
+        editor.insert("// unsaved\n");
+        editor.selectTab(2);
+
+        assertEquals(BuiltinEditor.CloseResult.CONFIRM_REQUIRED, editor.closeTab(0));
+        assertTrue(editor.closeConfirmationPending());
+        assertEquals(List.of("A.java", "B.java", "C.java"), tabNames(editor));
+        assertEquals("C.java", activeName(editor));
+
+        editor.confirmClose(true);
+
+        assertFalse(editor.closeConfirmationPending());
+        assertEquals(List.of("B.java", "C.java"), tabNames(editor));
+        assertEquals("C.java", activeName(editor), "discarding another tab does not move the selection");
+    }
+
+    @Test
+    void decliningTheCloseOfADirtyTabKeepsEveryTab() throws IOException {
+        BuiltinEditor editor = threeTabs();
+        editor.selectTab(1);
+        editor.insert("// unsaved\n");
+        editor.selectTab(2);
+
+        editor.closeTab(1);
+        editor.confirmClose(false);
+
+        assertEquals(List.of("A.java", "B.java", "C.java"), tabNames(editor));
+        assertEquals("C.java", activeName(editor));
+    }
+
+    @Test
+    void closeRequestsOutsideTheOpenTabsOrWhileAnotherIsPendingCloseNothing() throws IOException {
+        BuiltinEditor editor = threeTabs();
+        editor.selectTab(0);
+        editor.insert("// unsaved\n");
+
+        assertEquals(BuiltinEditor.CloseResult.EMPTY, editor.closeTab(-1));
+        assertEquals(BuiltinEditor.CloseResult.EMPTY, editor.closeTab(3));
+        assertEquals(BuiltinEditor.CloseResult.CONFIRM_REQUIRED, editor.closeTab(0));
+        assertEquals(BuiltinEditor.CloseResult.CONFIRM_REQUIRED, editor.closeTab(2));
+
+        assertEquals(List.of("A.java", "B.java", "C.java"), tabNames(editor));
+    }
+
+    private BuiltinEditor threeTabs() throws IOException {
+        BuiltinEditor editor = editor(null);
+        for (String name : List.of("A.java", "B.java", "C.java")) {
+            editor.open(new OpenRequest(write(name, "class " + name.charAt(0) + " {}\n"), 0));
+        }
+        return editor;
+    }
+
+    private static List<String> tabNames(BuiltinEditor editor) {
+        return editor.tabs().stream().map(BuiltinEditor.TabView::file).toList();
+    }
+
+    private static String activeName(BuiltinEditor editor) {
+        return editor.tabs().stream().filter(BuiltinEditor.TabView::active).findFirst().orElseThrow().file();
+    }
+
+    @Test
     void restoresOpenTabsAndUnsavedRecoveryTextForTheSameProject() throws IOException {
         Path first = write("One.java", "class One {}\n");
         Path second = write("Two.java", "class Two {}\n");
